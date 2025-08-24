@@ -18,22 +18,111 @@ A complete ESP32-based gong scheduling system with LoRa communication, MP3 playb
 - **XL1278-SMT LoRa module** (433 MHz)
 - **MP3-TF-16P audio module**
 - **MicroSD card** (for MP3 storage)
-- **Speaker/headphones** for audio output
+- **Speaker/headphones** for audio output (8Ω/4Ω, до 3W)
+- **Power supply**: 5V/2A (USB-C или внешний блок питания)
 
-## Pin Connections
+## Коммутация и подключение
 
-### LoRa Module (XL1278-SMT)
-- **CS**: GPIO5
-- **RST**: GPIO14  
-- **DIO0**: GPIO2
-- **SCK**: GPIO18
-- **MISO**: GPIO19
-- **MOSI**: GPIO23
+### Схема подключения компонентов
 
-### MP3 Module (MP3-TF-16P)
-- **RX**: GPIO17 (ESP32 TX)
-- **TX**: GPIO16 (ESP32 RX)
-- **BUSY**: GPIO18
+```
+                    ┌─────────────────┐
+                    │   ESP32-D0WD-V3 │
+                    │                 │
+                    │ 3.3V ──────────┼─── 3.3V (питание)
+                    │ GND ───────────┼─── GND (общий)
+                    │                 │
+                    │ GPIO5 ──────────┼─── CS (LoRa)
+                    │ GPIO14 ─────────┼─── RST (LoRa)
+                    │ GPIO2 ──────────┼─── DIO0 (LoRa)
+                    │ GPIO18 ─────────┼─── SCK (LoRa)
+                    │ GPIO19 ─────────┼─── MISO (LoRa)
+                    │ GPIO23 ─────────┼─── MOSI (LoRa)
+                    │                 │
+                    │ GPIO16 ─────────┼─── TX (MP3)
+                    │ GPIO17 ─────────┼─── RX (MP3)
+                    │ GPIO4 ──────────┼─── BUSY (MP3)
+                    └─────────────────┘
+                              │
+                    ┌─────────┼─────────┐
+                    │         │         │
+              ┌─────▼─────┐ ┌─▼─────┐ ┌─▼─────┐
+              │ LoRa      │ │ MP3   │ │       │
+              │ XL1278-SMT│ │TF-16P │ │       │
+              │           │ │       │ │       │
+              │ CS ───────┘ │ TX ───┘ │       │
+              │ RST ───────┘ │ RX ───┘ │       │
+              │ DIO0 ───────┘ │BUSY ──┘ │       │
+              │ SCK ───────┘ │       │ │       │
+              │ MISO ───────┘ │       │ │       │
+              │ MOSI ───────┘ │       │ │       │
+              └───────────────┘ └───────┘ │       │
+                                          │       │
+                                    ┌─────▼─────┐ │
+                                    │ Speaker  │ │
+                                    │ (8Ω/4Ω)  │ │
+                                    │           │ │
+                                    │ Audio ────┘ │
+                                    │ Output      │
+                                    └─────────────┘
+```
+
+### Детальное подключение по компонентам
+
+#### 1. LoRa Module (XL1278-SMT)
+- **CS (Chip Select)**: GPIO5
+- **RST (Reset)**: GPIO14  
+- **DIO0 (Digital I/O 0)**: GPIO2
+- **SCK (Serial Clock)**: GPIO18
+- **MISO (Master In Slave Out)**: GPIO19
+- **MOSI (Master Out Slave In)**: GPIO23
+
+#### 2. MP3 Module (MP3-TF-16P)
+- **RX (Receive)**: GPIO17 (ESP32 TX)
+- **TX (Transmit)**: GPIO16 (ESP32 RX)
+- **BUSY (Busy Indicator)**: GPIO4 (изменено с GPIO18 для устранения конфликта)
+
+#### 3. Динамик/Наушники
+- **Audio Output**: К аудиовыходу MP3-TF-16P
+- **Impedance**: 8Ω или 4Ω (рекомендуется)
+- **Power**: До 3W (зависит от модуля)
+
+### Питание системы
+
+#### Напряжения питания:
+- **ESP32**: 3.3V (встроенный стабилизатор)
+- **LoRa XL1278-SMT**: 3.3V (питается от ESP32)
+- **MP3-TF-16P**: 3.3V (питается от ESP32)
+- **Общий ток потребления**: ~200-300mA в режиме ожидания, до 500mA при воспроизведении
+
+#### Источники питания:
+1. **USB-C (рекомендуется)**: 5V/1A от компьютера или зарядного устройства
+2. **Внешний блок питания**: 5V/1A или 5V/2A для стационарной работы
+3. **Li-Po аккумулятор**: 3.7V (ESP32 автоматически понижает до 3.3V)
+
+#### Требования к питанию:
+- **Минимальное напряжение**: 4.5V (для стабильной работы 3.3V)
+- **Рекомендуемое напряжение**: 5V
+- **Максимальное напряжение**: 6V (не превышать!)
+- **Ток**: Минимум 1A, рекомендуется 2A для надежности
+
+### Порядок подключения
+
+1. **Отключите питание** от всех компонентов
+2. **Подключите GND** ко всем модулям
+3. **Подключите 3.3V** к LoRa и MP3 модулям
+4. **Подключите сигнальные линии** согласно схеме
+5. **Подключите динамик** к аудиовыходу MP3 модуля
+6. **Подключите питание 5V** к ESP32
+7. **Включите систему** и проверьте работу
+
+### Проверка подключения
+
+После сборки проверьте:
+- **LoRa**: Индикатор питания должен гореть
+- **MP3**: Светодиод должен мигать при инициализации
+- **ESP32**: Синий светодиод должен гореть
+- **Serial Monitor**: Должны появляться сообщения инициализации
 
 ## Software Setup
 
@@ -215,7 +304,8 @@ ring/
 3. **MP3 Not Playing**
    - Check audio connections
    - Verify MP3 files are on SD card
-   - Check BUSY pin connection
+   - Check BUSY pin connection (GPIO4)
+   - Verify no pin conflicts with LoRa (GPIO18)
 
 4. **Web Interface Not Loading**
    - Check if SPIFFS is properly initialized
