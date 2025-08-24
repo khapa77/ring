@@ -34,6 +34,7 @@ void handleWiFiSave();
 void handleWiFiReset();
 void handleWiFiStatus();
 void handleScheduleDebug();
+void handleSortSchedule();
 void handleNotFound();
 bool isWiFiConnected();
 String getWiFiStatus();

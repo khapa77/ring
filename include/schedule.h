@@ -23,6 +23,8 @@ void loadScheduleFromSPIFFS();
 bool saveScheduleToSPIFFS();
 void loadDefaultSchedules();
 void triggerGong();
+void sortScheduleByTime();
+void autoSortSchedule();
 
 // External callback for gong trigger
 extern void (*onGongTrigger)();

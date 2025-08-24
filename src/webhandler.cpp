@@ -1,4 +1,5 @@
 #include "webhandler.h"
+#include "schedule.h"
 #include <WiFi.h>
 #include <ArduinoJson.h>
 
@@ -40,6 +41,7 @@ void setupWebServer() {
     // Add specific ID-based routes for better REST API support
     server.on("/schedule/edit", HTTP_PUT, handleEditScheduleById);
     server.on("/schedule/delete", HTTP_DELETE, handleDeleteScheduleById);
+    server.on("/schedule/sort", HTTP_POST, handleSortSchedule);
     server.on("/schedule-debug", HTTP_GET, handleScheduleDebug);
     
     server.on("/play", HTTP_POST, handlePlay);
@@ -559,5 +561,23 @@ void handleScheduleDebug() {
         server.send(200, "application/json", result);
         
         Serial.println("=== END SCHEDULE DEBUG ===");
+    }
+}
+
+void handleSortSchedule() {
+    if (server.method() == HTTP_POST) {
+        Serial.println("=== MANUAL SORT SCHEDULE REQUEST ===");
+        
+        // Perform manual sorting
+        sortScheduleByTime();
+        
+        Serial.println("Manual sort completed, sending response");
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule sorted by time\"}");
+        
+        Serial.println("=== END MANUAL SORT REQUEST ===");
+    } else {
+        Serial.printf("Invalid method for SORT: %s\n", server.method() == HTTP_GET ? "GET" : "PUT");
+        server.send(405, "text/plain", "Method Not Allowed");
     }
 }

@@ -144,6 +144,15 @@
             background: #e67e22;
         }
         
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .btn-info:hover {
+            background: #138496;
+        }
+        
         .btn-sm {
             padding: 8px 16px;
             font-size: 14px;
@@ -365,12 +374,13 @@
             <div id="scheduleList"></div>
         </div>
 
-        <!-- Manual Control Section -->
+                <!-- Manual Control Section -->
         <div class="card">
             <div class="card-title">Manual Control</div>
             <button class="btn btn-primary" onclick="playGong()">Play Gong (Local)</button>
-            <button class="btn btn-warning" onclick="playGongLoRa()">Send Gong (LoRa)</button>
+            <button class="btn btn-warning" onclick="playGongLoRa()">Send Gong (LoRa)</button> 
             <button class="btn btn-secondary" onclick="debugSchedule()">Debug Schedule</button>
+            <button class="btn btn-info" onclick="sortSchedule()">Sort Schedule</button>
         </div>
 
         <!-- Notifications -->
@@ -694,6 +704,25 @@
             } catch (error) {
                 console.error('Debug error:', error);
                 showNotification('Debug error: ' + error.message, 'danger');
+            }
+        }
+
+        async function sortSchedule() {
+            if (confirm('Sort schedule by time? This will reorder all entries chronologically.')) {
+                try {
+                    const response = await fetch('/schedule/sort', { method: 'POST' });
+                    if (response.ok) {
+                        showNotification('Schedule sorted successfully!', 'success');
+                        loadSchedules(); // Refresh the display
+                    } else {
+                        const errorText = await response.text();
+                        console.error('Sort failed:', response.status, errorText);
+                        showNotification(`Failed to sort schedule: ${response.status}`, 'danger');
+                    }
+                } catch (error) {
+                    console.error('Sort error:', error);
+                    showNotification('Network error: ' + error.message, 'danger');
+                }
             }
         }
 

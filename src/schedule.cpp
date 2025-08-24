@@ -82,7 +82,9 @@ bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description) {
     entry.id = nextScheduleId++;
     
     scheduleCount++;
-    saveScheduleToSPIFFS();
+    
+    // Auto-sort after adding new entry
+    autoSortSchedule();
     
     Serial.printf("Added schedule: %02d:%02d - %s (ID: %u)\n", 
                  hour, minute, description.c_str(), entry.id);
@@ -126,14 +128,11 @@ bool deleteScheduleEntry(uint32_t id) {
             
             Serial.printf("Schedule count after deletion: %d\n", scheduleCount);
             
-            // Save to SPIFFS
-            if (saveScheduleToSPIFFS()) {
-                Serial.printf("Successfully deleted schedule ID: %u\n", id);
-                return true;
-            } else {
-                Serial.println("Error: Failed to save schedule to SPIFFS after deletion");
-                return false;
-            }
+            // Auto-sort after deletion
+            autoSortSchedule();
+            
+            Serial.printf("Successfully deleted schedule ID: %u\n", id);
+            return true;
         }
     }
     
@@ -152,7 +151,9 @@ bool editScheduleEntry(uint32_t id, uint8_t hour, uint8_t minute, const String& 
             scheduleEntries[i].minute = minute;
             scheduleEntries[i].description = description;
             scheduleEntries[i].enabled = enabled;
-            saveScheduleToSPIFFS();
+            
+            // Auto-sort after editing entry
+            autoSortSchedule();
             
             Serial.printf("Edited schedule ID: %u to %02d:%02d - %s (enabled: %s)\n", 
                         id, hour, minute, description.c_str(), enabled ? "true" : "false");
@@ -298,4 +299,94 @@ void triggerGong() {
     if (onGongTrigger) {
         onGongTrigger();
     }
+}
+
+void sortScheduleByTime() {
+    Serial.println("=== SORTING SCHEDEDULE BY TIME ===");
+    Serial.printf("Before sorting - Schedule count: %d\n", scheduleCount);
+    
+    // Print current order
+    Serial.println("Current order:");
+    for (uint8_t i = 0; i < scheduleCount; i++) {
+        Serial.printf("  [%d]: ID=%u, %02d:%02d - %s\n", 
+                     i, scheduleEntries[i].id, 
+                     scheduleEntries[i].hour, 
+                     scheduleEntries[i].minute, 
+                     scheduleEntries[i].description.c_str());
+    }
+    
+    // Bubble sort by time (hour * 60 + minute)
+    bool swapped;
+    for (uint8_t i = 0; i < scheduleCount - 1; i++) {
+        swapped = false;
+        for (uint8_t j = 0; j < scheduleCount - i - 1; j++) {
+            uint16_t time1 = scheduleEntries[j].hour * 60 + scheduleEntries[j].minute;
+            uint16_t time2 = scheduleEntries[j + 1].hour * 60 + scheduleEntries[j + 1].minute;
+            
+            if (time1 > time2) {
+                // Swap entries
+                ScheduleEntry temp = scheduleEntries[j];
+                scheduleEntries[j] = scheduleEntries[j + 1];
+                scheduleEntries[j + 1] = temp;
+                swapped = true;
+                
+                Serial.printf("Swapped: [%d] %02d:%02d <-> [%d] %02d:%02d\n", 
+                            j, scheduleEntries[j].hour, scheduleEntries[j].minute,
+                            j + 1, scheduleEntries[j + 1].hour, scheduleEntries[j + 1].minute);
+            }
+        }
+        
+        // If no swapping occurred, array is sorted
+        if (!swapped) {
+            break;
+        }
+    }
+    
+    Serial.println("After sorting:");
+    for (uint8_t i = 0; i < scheduleCount; i++) {
+        Serial.printf("  [%d]: ID=%u, %02d:%02d - %s\n", 
+                     i, scheduleEntries[i].id, 
+                     scheduleEntries[i].hour, 
+                     scheduleEntries[i].minute, 
+                     scheduleEntries[i].description.c_str());
+    }
+    
+    // Save sorted schedule to SPIFFS
+    if (saveScheduleToSPIFFS()) {
+        Serial.println("Sorted schedule saved to SPIFFS");
+    } else {
+        Serial.println("Error: Failed to save sorted schedule to SPIFFS");
+    }
+    
+    Serial.println("=== END SORTING ===");
+}
+
+void autoSortSchedule() {
+    Serial.println("=== AUTO SORTING SCHEDULE ===");
+    
+    if (scheduleCount <= 1) {
+        Serial.println("No need to sort - less than 2 entries");
+        return;
+    }
+    
+    // Check if sorting is needed
+    bool needsSorting = false;
+    for (uint8_t i = 0; i < scheduleCount - 1; i++) {
+        uint16_t time1 = scheduleEntries[i].hour * 60 + scheduleEntries[i].minute;
+        uint16_t time2 = scheduleEntries[i + 1].hour * 60 + scheduleEntries[i + 1].minute;
+        
+        if (time1 > time2) {
+            needsSorting = true;
+            break;
+        }
+    }
+    
+    if (needsSorting) {
+        Serial.println("Schedule needs sorting, performing auto-sort...");
+        sortScheduleByTime();
+    } else {
+        Serial.println("Schedule is already sorted, no action needed");
+    }
+    
+    Serial.println("=== END AUTO SORTING ===");
 }
