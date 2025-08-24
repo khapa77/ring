@@ -117,7 +117,7 @@ void handleAddSchedule() {
         String body = server.arg("plain");
         Serial.printf("Request body: %s\n", body.c_str());
         
-        DynamicJsonDocument doc(512);
+        DynamicJsonDocument doc(256);
         DeserializationError error = deserializeJson(doc, body);
         
         if (error) {
@@ -129,26 +129,34 @@ void handleAddSchedule() {
         uint8_t hour = doc["hour"] | 0;
         uint8_t minute = doc["minute"] | 0;
         String description = doc["description"] | "";
+        uint8_t soundTypeValue = doc["soundType"] | 1;  // 🆕 Получаем тип звука
         
-        Serial.printf("Parsed data: hour=%d, minute=%d, description='%s'\n", 
-                     hour, minute, description.c_str());
+        // Преобразуем в SoundType
+        SoundType soundType = static_cast<SoundType>(soundTypeValue);
+        if (soundTypeValue < 1 || soundTypeValue > 4) {
+            soundType = SOUND_SHORT; // Default fallback
+        }
+        
+        Serial.printf("Parsed schedule data: %02d:%02d - %s (Sound: %d)\n", 
+                     hour, minute, description.c_str(), soundTypeValue);
         
         if (hour > 23 || minute > 59) {
-            Serial.printf("Invalid time: %02d:%02d\n", hour, minute);
-            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid time\"}");
+            Serial.println("Error: Invalid time values");
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid time values\"}");
             return;
         }
         
         if (description.length() == 0) {
-            Serial.println("Empty description");
+            Serial.println("Error: Empty description");
             server.send(400, "application/json", "{\"success\":false,\"message\":\"Description cannot be empty\"}");
             return;
         }
         
-        Serial.printf("Calling addScheduleEntry(%d, %d, '%s')\n", hour, minute, description.c_str());
+        Serial.printf("Calling addScheduleEntry(%d, %d, '%s', SoundType: %d)\n", 
+                     hour, minute, description.c_str(), soundTypeValue);
         
-        if (addScheduleEntry(hour, minute, description)) {
-            Serial.println("Schedule added successfully, sending 200 response");
+        if (addScheduleEntry(hour, minute, description, soundType)) {
+            Serial.println("addScheduleEntry returned true, sending 200 response");
             server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule added\"}");
         } else {
@@ -159,19 +167,22 @@ void handleAddSchedule() {
         
         Serial.println("=== END ADD SCHEDULE REQUEST ===");
     } else {
-        Serial.printf("Invalid method for ADD: %s\n", server.method() == HTTP_GET ? "GET" : "PUT");
+        Serial.printf("Invalid method for ADD: %s\n", server.method() == HTTP_GET ? "GET" : "POST");
         server.send(405, "text/plain", "Method Not Allowed");
     }
 }
 
 void handleEditSchedule() {
     if (server.method() == HTTP_PUT) {
+        Serial.println("=== EDIT SCHEDULE REQUEST ===");
         String body = server.arg("plain");
+        Serial.printf("Request body: %s\n", body.c_str());
         
-        DynamicJsonDocument doc(512);
+        DynamicJsonDocument doc(256);
         DeserializationError error = deserializeJson(doc, body);
         
         if (error) {
+            Serial.printf("JSON parse error: %s\n", error.c_str());
             server.send(400, "text/plain", "Invalid JSON");
             return;
         }
@@ -181,8 +192,18 @@ void handleEditSchedule() {
         uint8_t minute = doc["minute"] | 0;
         String description = doc["description"] | "";
         bool enabled = doc["enabled"] | true;
+        uint8_t soundTypeValue = doc["soundType"] | 1;  // 🆕 Получаем тип звука
         
-        if (editScheduleEntry(id, hour, minute, description, enabled)) {
+        // Преобразуем в SoundType
+        SoundType soundType = static_cast<SoundType>(soundTypeValue);
+        if (soundTypeValue < 1 || soundTypeValue > 4) {
+            soundType = SOUND_SHORT; // Default fallback
+        }
+        
+        Serial.printf("Editing schedule ID %u: %02d:%02d - %s (enabled: %s, Sound: %d)\n", 
+                     id, hour, minute, description.c_str(), enabled ? "true" : "false", soundTypeValue);
+        
+        if (editScheduleEntry(id, hour, minute, description, enabled, soundType)) {
             server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule updated\"}");
         } else {
@@ -220,11 +241,18 @@ void handleEditScheduleById() {
         uint8_t minute = doc["minute"] | 0;
         String description = doc["description"] | "";
         bool enabled = doc["enabled"] | true;
+        uint8_t soundTypeValue = doc["soundType"] | 1;  // 🆕 Получаем тип звука
         
-        Serial.printf("Updating schedule ID %u: %02d:%02d - %s (enabled: %s)\n", 
-                     id, hour, minute, description.c_str(), enabled ? "true" : "false");
+        // Преобразуем в SoundType
+        SoundType soundType = static_cast<SoundType>(soundTypeValue);
+        if (soundTypeValue < 1 || soundTypeValue > 4) {
+            soundType = SOUND_SHORT; // Default fallback
+        }
         
-        if (editScheduleEntry(id, hour, minute, description, enabled)) {
+        Serial.printf("Updating schedule ID %u: %02d:%02d - %s (enabled: %s, Sound: %d)\n", 
+                     id, hour, minute, description.c_str(), enabled ? "true" : "false", soundTypeValue);
+        
+        if (editScheduleEntry(id, hour, minute, description, enabled, soundType)) {
             Serial.printf("Schedule ID %u updated successfully\n", id);
             server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule updated\"}");

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include "mp3handler.h"  // 🆕 Для доступа к playSoundByType
 
 #define MAX_SCHEDULE_ENTRIES 20
 #define SCHEDULE_FILE "/schedule.json"
@@ -55,17 +56,19 @@ void checkSchedule() {
             scheduleEntries[i].hour == ptm->tm_hour && 
             scheduleEntries[i].minute == ptm->tm_min) {
             
-            Serial.printf("Schedule triggered: %02d:%02d - %s\n", 
+            String soundName = getSoundTypeName(scheduleEntries[i].soundType);
+            Serial.printf("Schedule triggered: %02d:%02d - %s (Sound: %s)\n", 
                         scheduleEntries[i].hour, 
                         scheduleEntries[i].minute, 
-                        scheduleEntries[i].description.c_str());
+                        scheduleEntries[i].description.c_str(),
+                        soundName.c_str());
             
             triggerGong();
         }
     }
 }
 
-bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description) {
+bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description, SoundType soundType) {
     if (scheduleCount >= MAX_SCHEDULE_ENTRIES) {
         return false;
     }
@@ -80,14 +83,16 @@ bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description) {
     entry.description = description;
     entry.enabled = true;
     entry.id = nextScheduleId++;
+    entry.soundType = soundType;  // 🆕 Устанавливаем тип звука
     
     scheduleCount++;
     
     // Auto-sort after adding new entry
     autoSortSchedule();
     
-    Serial.printf("Added schedule: %02d:%02d - %s (ID: %u)\n", 
-                 hour, minute, description.c_str(), entry.id);
+    String soundName = getSoundTypeName(soundType);
+    Serial.printf("Added schedule: %02d:%02d - %s (ID: %u, Sound: %s)\n", 
+                 hour, minute, description.c_str(), entry.id, soundName.c_str());
     
     return true;
 }
@@ -140,23 +145,20 @@ bool deleteScheduleEntry(uint32_t id) {
     return false;
 }
 
-bool editScheduleEntry(uint32_t id, uint8_t hour, uint8_t minute, const String& description, bool enabled) {
-    if (hour > 23 || minute > 59) {
-        return false;
-    }
-    
+bool editScheduleEntry(uint32_t id, uint8_t hour, uint8_t minute, const String& description, bool enabled, SoundType soundType) {
     for (uint8_t i = 0; i < scheduleCount; i++) {
         if (scheduleEntries[i].id == id) {
             scheduleEntries[i].hour = hour;
             scheduleEntries[i].minute = minute;
             scheduleEntries[i].description = description;
             scheduleEntries[i].enabled = enabled;
+            scheduleEntries[i].soundType = soundType;  // 🆕 Обновляем тип звука
             
-            // Auto-sort after editing entry
-            autoSortSchedule();
+            String soundName = getSoundTypeName(soundType);
+            Serial.printf("Edited schedule: %02d:%02d - %s (ID: %u, Sound: %s)\n", 
+                         hour, minute, description.c_str(), id, soundName.c_str());
             
-            Serial.printf("Edited schedule ID: %u to %02d:%02d - %s (enabled: %s)\n", 
-                        id, hour, minute, description.c_str(), enabled ? "true" : "false");
+            saveScheduleToSPIFFS();
             return true;
         }
     }
@@ -174,6 +176,7 @@ String getScheduleJSON() {
         entry["minute"] = scheduleEntries[i].minute;
         entry["enabled"] = scheduleEntries[i].enabled;
         entry["description"] = scheduleEntries[i].description;
+        entry["soundType"] = static_cast<uint8_t>(scheduleEntries[i].soundType);  // 🆕 Включаем тип звука
     }
     
     String result;
@@ -214,6 +217,7 @@ void loadScheduleFromSPIFFS() {
         sched.minute = entry["minute"] | 0;
         sched.enabled = entry["enabled"] | true;
         sched.description = entry["description"] | "";
+        sched.soundType = static_cast<SoundType>(entry["soundType"] | 1);  // 🆕 Загружаем тип звука
         
         if (sched.id >= nextScheduleId) {
             nextScheduleId = sched.id + 1;
@@ -258,6 +262,7 @@ void loadDefaultSchedules() {
             sched.minute = entry["minute"] | 0;
             sched.enabled = entry["enabled"] | true;
             sched.description = entry["description"] | "";
+            sched.soundType = static_cast<SoundType>(entry["soundType"] | 1);  // 🆕 Загружаем тип звука
             
             scheduleCount++;
         }
@@ -286,6 +291,7 @@ bool saveScheduleToSPIFFS() {
         entry["minute"] = scheduleEntries[i].minute;
         entry["enabled"] = scheduleEntries[i].enabled;
         entry["description"] = scheduleEntries[i].description;
+        entry["soundType"] = static_cast<uint8_t>(scheduleEntries[i].soundType);  // 🆕 Сохраняем тип звука
     }
     
     serializeJson(doc, file);
@@ -297,6 +303,26 @@ bool saveScheduleToSPIFFS() {
 
 void triggerGong() {
     if (onGongTrigger) {
+        // 🆕 Воспроизводим выбранный звук для текущего будильника
+        // Находим текущий будильник по времени
+        timeClient.update();
+        if (timeClient.isTimeSet()) {
+            unsigned long epochTime = timeClient.getEpochTime();
+            struct tm *ptm = gmtime((time_t *)&epochTime);
+            
+            for (uint8_t i = 0; i < scheduleCount; i++) {
+                if (scheduleEntries[i].enabled && 
+                    scheduleEntries[i].hour == ptm->tm_hour && 
+                    scheduleEntries[i].minute == ptm->tm_min) {
+                    
+                    // Воспроизводим выбранный звук
+                    playSoundByType(scheduleEntries[i].soundType);
+                    break;
+                }
+            }
+        }
+        
+        // Вызываем основной callback
         onGongTrigger();
     }
 }
@@ -390,3 +416,6 @@ void autoSortSchedule() {
     
     Serial.println("=== END AUTO SORTING ===");
 }
+
+// Utility function to get sound type name
+// Убрана дублирующаяся функция - она определена в mp3handler.cpp

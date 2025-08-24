@@ -43,8 +43,8 @@ void sendMP3Command(uint8_t command, uint8_t data = 0) {
 }
 
 void playGong() {
-    // Play track 1 (assuming gong sound is stored as first track)
-    playTrack(1);
+    // Play default sound (Short - track 1)
+    playSoundByType(SOUND_SHORT);
 }
 
 void playTrack(uint8_t trackNumber) {
@@ -54,6 +54,42 @@ void playTrack(uint8_t trackNumber) {
     }
     
     sendMP3Command(MP3_CMD_PLAY_TRACK, trackNumber);
+}
+
+void playSoundByType(SoundType soundType) {
+    uint8_t trackNumber = static_cast<uint8_t>(soundType);
+    
+    if (trackNumber < 1 || trackNumber > 4) {
+        Serial.println("Invalid sound type, using default (Short)");
+        trackNumber = 1;
+    }
+    
+    String soundName = getSoundTypeName(soundType);
+    Serial.printf("Playing sound: %s (Track %d)\n", soundName.c_str(), trackNumber);
+    
+    playTrack(trackNumber);
+}
+
+String getSoundTypeName(SoundType soundType) {
+    switch (soundType) {
+        case SOUND_SHORT:
+            return "Short";
+        case SOUND_LONG:
+            return "Long";
+        case SOUND_ONE:
+            return "One";
+        case SOUND_ORIGINAL:
+            return "Original";
+        default:
+            return "Unknown";
+    }
+}
+
+SoundType getSoundTypeByNumber(uint8_t trackNumber) {
+    if (trackNumber >= 1 && trackNumber <= 4) {
+        return static_cast<SoundType>(trackNumber);
+    }
+    return SOUND_SHORT; // Default fallback
 }
 
 void setVolume(uint8_t volume) {

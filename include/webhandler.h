@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <SPIFFS.h>
+#include "schedule.h"  // 🆕 Для доступа к SoundType
 
 // Web server configuration
 #define WEB_SERVER_PORT 80
@@ -48,6 +49,6 @@ void resetWiFiConfig();
 extern void playGong();
 extern void sendGongLoRa();
 extern String getScheduleJSON();
-extern bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description);
+extern bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description, SoundType soundType);
 extern bool deleteScheduleEntry(uint32_t id);
-extern bool editScheduleEntry(uint32_t id, uint8_t hour, uint8_t minute, const String& description, bool enabled);
+extern bool editScheduleEntry(uint32_t id, uint8_t hour, uint8_t minute, const String& description, bool enabled, SoundType soundType);
