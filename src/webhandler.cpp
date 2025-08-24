@@ -38,8 +38,9 @@ void setupWebServer() {
     server.on("/schedule", HTTP_DELETE, handleDeleteSchedule);
     
     // Add specific ID-based routes for better REST API support
-    server.on("/schedule/", HTTP_PUT, handleEditScheduleById);
-    server.on("/schedule/", HTTP_DELETE, handleDeleteScheduleById);
+    server.on("/schedule/edit", HTTP_PUT, handleEditScheduleById);
+    server.on("/schedule/delete", HTTP_DELETE, handleDeleteScheduleById);
+    server.on("/schedule-debug", HTTP_GET, handleScheduleDebug);
     
     server.on("/play", HTTP_POST, handlePlay);
     server.on("/play-lora", HTTP_POST, handlePlayLoRa);
@@ -65,7 +66,7 @@ void loopWebServer() {
         if (WiFi.status() == WL_CONNECTED) {
             // WiFi connected, handle web server
             server.handleClient();
-        } else if (millis() - wifiStartTime > WIFI_TIMEOUT) {
+        } else if (millis() - wifiStartTime > 10000) { // 10 second timeout
             // WiFi connection failed, switch to AP mode
             Serial.println("WiFi connection failed, switching to AP mode");
             setupAPMode();
@@ -110,12 +111,15 @@ void handleSchedule() {
 
 void handleAddSchedule() {
     if (server.method() == HTTP_POST) {
+        Serial.println("=== ADD SCHEDULE REQUEST ===");
         String body = server.arg("plain");
+        Serial.printf("Request body: %s\n", body.c_str());
         
         DynamicJsonDocument doc(512);
         DeserializationError error = deserializeJson(doc, body);
         
         if (error) {
+            Serial.printf("JSON parse error: %s\n", error.c_str());
             server.send(400, "text/plain", "Invalid JSON");
             return;
         }
@@ -124,11 +128,37 @@ void handleAddSchedule() {
         uint8_t minute = doc["minute"] | 0;
         String description = doc["description"] | "";
         
+        Serial.printf("Parsed data: hour=%d, minute=%d, description='%s'\n", 
+                     hour, minute, description.c_str());
+        
+        if (hour > 23 || minute > 59) {
+            Serial.printf("Invalid time: %02d:%02d\n", hour, minute);
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid time\"}");
+            return;
+        }
+        
+        if (description.length() == 0) {
+            Serial.println("Empty description");
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Description cannot be empty\"}");
+            return;
+        }
+        
+        Serial.printf("Calling addScheduleEntry(%d, %d, '%s')\n", hour, minute, description.c_str());
+        
         if (addScheduleEntry(hour, minute, description)) {
+            Serial.println("Schedule added successfully, sending 200 response");
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule added\"}");
         } else {
+            Serial.println("addScheduleEntry returned false, sending 400 response");
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(400, "application/json", "{\"success\":false,\"message\":\"Failed to add schedule\"}");
         }
+        
+        Serial.println("=== END ADD SCHEDULE REQUEST ===");
+    } else {
+        Serial.printf("Invalid method for ADD: %s\n", server.method() == HTTP_GET ? "GET" : "PUT");
+        server.send(405, "text/plain", "Method Not Allowed");
     }
 }
 
@@ -151,8 +181,10 @@ void handleEditSchedule() {
         bool enabled = doc["enabled"] | true;
         
         if (editScheduleEntry(id, hour, minute, description, enabled)) {
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule updated\"}");
         } else {
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(400, "application/json", "{\"success\":false,\"message\":\"Failed to update schedule\"}");
         }
     }
@@ -160,24 +192,25 @@ void handleEditSchedule() {
 
 void handleEditScheduleById() {
     if (server.method() == HTTP_PUT) {
-        String uri = server.uri();
-        // Extract ID from URI like "/schedule/123"
-        int idStart = uri.lastIndexOf('/') + 1;
-        String idStr = uri.substring(idStart);
-        uint32_t id = idStr.toInt();
-        
-        if (id == 0) {
-            server.send(400, "text/plain", "Invalid ID");
-            return;
-        }
-        
+        Serial.println("=== EDIT SCHEDULE REQUEST ===");
         String body = server.arg("plain");
+        Serial.printf("Request body: %s\n", body.c_str());
         
         DynamicJsonDocument doc(512);
         DeserializationError error = deserializeJson(doc, body);
         
         if (error) {
+            Serial.printf("JSON parse error: %s\n", error.c_str());
             server.send(400, "text/plain", "Invalid JSON");
+            return;
+        }
+        
+        uint32_t id = doc["id"] | 0;
+        Serial.printf("Parsed ID: %u\n", id);
+        
+        if (id == 0) {
+            Serial.println("Error: Invalid ID (0 or parsing failed)");
+            server.send(400, "text/plain", "Invalid ID");
             return;
         }
         
@@ -186,45 +219,99 @@ void handleEditScheduleById() {
         String description = doc["description"] | "";
         bool enabled = doc["enabled"] | true;
         
+        Serial.printf("Updating schedule ID %u: %02d:%02d - %s (enabled: %s)\n", 
+                     id, hour, minute, description.c_str(), enabled ? "true" : "false");
+        
         if (editScheduleEntry(id, hour, minute, description, enabled)) {
+            Serial.printf("Schedule ID %u updated successfully\n", id);
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule updated\"}");
         } else {
+            Serial.printf("Failed to update schedule ID %u\n", id);
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(400, "application/json", "{\"success\":false,\"message\":\"Failed to update schedule\"}");
         }
+        
+        Serial.println("=== END EDIT SCHEDULE REQUEST ===");
+    } else {
+        Serial.printf("Invalid method for EDIT by ID: %s\n", server.method() == HTTP_GET ? "GET" : "POST");
+        server.send(405, "text/plain", "Method Not Allowed");
     }
 }
 
 void handleDeleteSchedule() {
     if (server.method() == HTTP_DELETE) {
         String idStr = server.arg("id");
+        Serial.printf("DELETE request received for schedule ID: '%s'\n", idStr.c_str());
+        
+        if (idStr.length() == 0) {
+            Serial.println("Error: No ID provided in DELETE request");
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"No ID provided\"}");
+            return;
+        }
+        
         uint32_t id = idStr.toInt();
+        Serial.printf("Parsed ID: %u\n", id);
+        
+        if (id == 0) {
+            Serial.println("Error: Invalid ID (0 or parsing failed)");
+            server.send(400, "application/json", "{\"success\":false,\"message\":\"Invalid ID\"}");
+            return;
+        }
         
         if (deleteScheduleEntry(id)) {
+            Serial.printf("Schedule ID %u deleted successfully\n", id);
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule deleted\"}");
         } else {
+            Serial.printf("Failed to delete schedule ID %u\n", id);
             server.send(400, "application/json", "{\"success\":false,\"message\":\"Failed to delete schedule\"}");
         }
+    } else {
+        Serial.printf("Invalid method for DELETE: %s\n", server.method() == HTTP_GET ? "GET" : "POST");
+        server.send(405, "text/plain", "Method Not Allowed");
     }
 }
 
 void handleDeleteScheduleById() {
     if (server.method() == HTTP_DELETE) {
-        String uri = server.uri();
-        // Extract ID from URI like "/schedule/123"
-        int idStart = uri.lastIndexOf('/') + 1;
-        String idStr = uri.substring(idStart);
-        uint32_t id = idStr.toInt();
+        Serial.println("=== DELETE SCHEDULE REQUEST ===");
+        String body = server.arg("plain");
+        Serial.printf("Request body: %s\n", body.c_str());
+        
+        DynamicJsonDocument doc(256);
+        DeserializationError error = deserializeJson(doc, body);
+        
+        if (error) {
+            Serial.printf("JSON parse error: %s\n", error.c_str());
+            server.send(400, "text/plain", "Invalid JSON");
+            return;
+        }
+        
+        uint32_t id = doc["id"] | 0;
+        Serial.printf("Parsed ID: %u\n", id);
         
         if (id == 0) {
+            Serial.println("Error: Invalid ID (0 or parsing failed)");
             server.send(400, "text/plain", "Invalid ID");
             return;
         }
         
+        Serial.printf("Attempting to delete schedule ID %u\n", id);
+        
         if (deleteScheduleEntry(id)) {
+            Serial.printf("Schedule ID %u deleted successfully\n", id);
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(200, "application/json", "{\"success\":true,\"message\":\"Schedule deleted\"}");
         } else {
+            Serial.printf("Failed to delete schedule ID %u\n", id);
+            server.sendHeader("Access-Control-Allow-Origin", "*");
             server.send(400, "application/json", "{\"success\":false,\"message\":\"Failed to delete schedule\"}");
         }
+        
+        Serial.println("=== END DELETE SCHEDULE REQUEST ===");
+    } else {
+        Serial.printf("Invalid method for DELETE by ID: %s\n", server.method() == HTTP_GET ? "GET" : "POST");
+        server.send(405, "text/plain", "Method Not Allowed");
     }
 }
 
@@ -423,4 +510,54 @@ void resetWiFiConfig() {
     wifiConfig.password[0] = '\0';
     
     Serial.println("WiFi configuration reset");
+}
+
+void handleScheduleDebug() {
+    if (server.method() == HTTP_GET) {
+        Serial.println("=== SCHEDULE DEBUG INFO ===");
+        
+        // Get schedule JSON
+        String scheduleJson = getScheduleJSON();
+        Serial.printf("Schedule JSON: %s\n", scheduleJson.c_str());
+        
+        // Create debug response
+        DynamicJsonDocument doc(2048);
+        doc["timestamp"] = millis();
+        doc["schedule_count"] = 0; // Will be filled by schedule module
+        
+        // Add schedule entries
+        JsonArray array = doc.createNestedArray("schedules");
+        // Note: We can't directly access scheduleEntries here, so we'll parse the JSON
+        
+        DynamicJsonDocument scheduleDoc(2048);
+        DeserializationError error = deserializeJson(scheduleDoc, scheduleJson);
+        
+        if (!error) {
+            JsonArray scheduleArray = scheduleDoc.as<JsonArray>();
+            for (JsonObject entry : scheduleArray) {
+                JsonObject debugEntry = array.createNestedObject();
+                debugEntry["id"] = entry["id"];
+                debugEntry["hour"] = entry["hour"];
+                debugEntry["minute"] = entry["minute"];
+                debugEntry["enabled"] = entry["enabled"];
+                debugEntry["description"] = entry["description"];
+            }
+            doc["schedule_count"] = array.size();
+        } else {
+            doc["parse_error"] = "Failed to parse schedule JSON";
+        }
+        
+        // Add SPIFFS info
+        doc["spiffs_total"] = SPIFFS.totalBytes();
+        doc["spiffs_used"] = SPIFFS.usedBytes();
+        doc["spiffs_free"] = SPIFFS.totalBytes() - SPIFFS.usedBytes();
+        
+        String result;
+        serializeJson(doc, result);
+        
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        server.send(200, "application/json", result);
+        
+        Serial.println("=== END SCHEDULE DEBUG ===");
+    }
 }

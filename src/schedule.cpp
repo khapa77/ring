@@ -91,19 +91,53 @@ bool addScheduleEntry(uint8_t hour, uint8_t minute, const String& description) {
 }
 
 bool deleteScheduleEntry(uint32_t id) {
+    Serial.printf("Attempting to delete schedule with ID: %u\n", id);
+    Serial.printf("Current schedule count: %d\n", scheduleCount);
+    
+    if (id == 0) {
+        Serial.println("Error: Invalid ID (0)");
+        return false;
+    }
+    
+    if (scheduleCount == 0) {
+        Serial.println("Error: No schedules to delete");
+        return false;
+    }
+    
+    // Debug: print all current schedule IDs
+    Serial.println("Current schedule IDs:");
+    for (uint8_t i = 0; i < scheduleCount; i++) {
+        Serial.printf("  [%d]: ID=%u, %02d:%02d - %s\n", 
+                     i, scheduleEntries[i].id, 
+                     scheduleEntries[i].hour, 
+                     scheduleEntries[i].minute, 
+                     scheduleEntries[i].description.c_str());
+    }
+    
     for (uint8_t i = 0; i < scheduleCount; i++) {
         if (scheduleEntries[i].id == id) {
+            Serial.printf("Found schedule to delete at index %d\n", i);
+            
             // Shift remaining entries
             for (uint8_t j = i; j < scheduleCount - 1; j++) {
                 scheduleEntries[j] = scheduleEntries[j + 1];
             }
             scheduleCount--;
-            saveScheduleToSPIFFS();
             
-            Serial.printf("Deleted schedule ID: %u\n", id);
-            return true;
+            Serial.printf("Schedule count after deletion: %d\n", scheduleCount);
+            
+            // Save to SPIFFS
+            if (saveScheduleToSPIFFS()) {
+                Serial.printf("Successfully deleted schedule ID: %u\n", id);
+                return true;
+            } else {
+                Serial.println("Error: Failed to save schedule to SPIFFS after deletion");
+                return false;
+            }
         }
     }
+    
+    Serial.printf("Error: Schedule with ID %u not found\n", id);
     return false;
 }
 
@@ -234,11 +268,11 @@ void loadDefaultSchedules() {
     }
 }
 
-void saveScheduleToSPIFFS() {
+bool saveScheduleToSPIFFS() {
     File file = SPIFFS.open(SCHEDULE_FILE, "w");
     if (!file) {
         Serial.println("Failed to open schedule file for writing");
-        return;
+        return false;
     }
     
     DynamicJsonDocument doc(2048);
@@ -257,6 +291,7 @@ void saveScheduleToSPIFFS() {
     file.close();
     
     Serial.println("Schedule saved to SPIFFS");
+    return true;
 }
 
 void triggerGong() {

@@ -370,6 +370,7 @@
             <div class="card-title">Manual Control</div>
             <button class="btn btn-primary" onclick="playGong()">Play Gong (Local)</button>
             <button class="btn btn-warning" onclick="playGongLoRa()">Send Gong (LoRa)</button>
+            <button class="btn btn-secondary" onclick="debugSchedule()">Debug Schedule</button>
         </div>
 
         <!-- Notifications -->
@@ -612,10 +613,10 @@
                 let response;
                 if (currentScheduleId) {
                     // Edit existing schedule
-                    response = await fetch(`/schedule/${currentScheduleId}`, {
+                    response = await fetch('/schedule/edit', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(scheduleData)
+                        body: JSON.stringify({ ...scheduleData, id: currentScheduleId })
                     });
                 } else {
                     // Add new schedule
@@ -644,20 +645,58 @@
         async function deleteSchedule(id) {
             if (confirm('Are you sure you want to delete this schedule?')) {
                 try {
-                    const response = await fetch(`/schedule/${id}`, { method: 'DELETE' });
+                    // Use the new endpoint format with ID in body
+                    const response = await fetch('/schedule/delete', { 
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: id })
+                    });
                     if (response.ok) {
                         showNotification('Schedule deleted successfully!', 'success');
                         loadSchedules();
                     } else {
-                        showNotification('Failed to delete schedule', 'danger');
+                        const errorText = await response.text();
+                        console.error('Delete failed:', response.status, errorText);
+                        showNotification(`Failed to delete schedule: ${response.status}`, 'danger');
                     }
                 } catch (error) {
+                    console.error('Delete error:', error);
                     showNotification('Network error: ' + error.message, 'danger');
                 }
             }
         }
 
         // Manual Control Functions
+        async function debugSchedule() {
+            try {
+                const response = await fetch('/schedule-debug');
+                if (response.ok) {
+                    const debugInfo = await response.json();
+                    console.log('Schedule Debug Info:', debugInfo);
+                    
+                    let message = `Schedule Debug Info:\n`;
+                    message += `Schedule Count: ${debugInfo.schedule_count}\n`;
+                    message += `SPIFFS Total: ${debugInfo.spiffs_total} bytes\n`;
+                    message += `SPIFFS Used: ${debugInfo.spiffs_used} bytes\n`;
+                    message += `SPIFFS Free: ${debugInfo.spiffs_free} bytes\n`;
+                    
+                    if (debugInfo.schedules && debugInfo.schedules.length > 0) {
+                        message += `\nSchedules:\n`;
+                        debugInfo.schedules.forEach(schedule => {
+                            message += `- ID: ${schedule.id}, ${schedule.hour}:${schedule.minute}, ${schedule.description} (${schedule.enabled ? 'enabled' : 'disabled'})\n`;
+                        });
+                    }
+                    
+                    alert(message);
+                } else {
+                    showNotification('Failed to get debug info', 'danger');
+                }
+            } catch (error) {
+                console.error('Debug error:', error);
+                showNotification('Debug error: ' + error.message, 'danger');
+            }
+        }
+
         async function playGong() {
             try {
                 const response = await fetch('/play', { method: 'POST' });

@@ -6,7 +6,6 @@
 
 // Web server configuration
 #define WEB_SERVER_PORT 80
-#define WIFI_TIMEOUT 60000  // 1 minute
 #define WIFI_CONFIG_FILE "/wifi.conf"
 
 // WiFi credentials structure
@@ -34,6 +33,7 @@ void handleWiFiConfig();
 void handleWiFiSave();
 void handleWiFiReset();
 void handleWiFiStatus();
+void handleScheduleDebug();
 void handleNotFound();
 bool isWiFiConnected();
 String getWiFiStatus();
