@@ -530,3 +530,16 @@ For issues and questions:
 **Note**: This system is designed for meditation centers, temples, or personal use. Ensure compliance with local regulations for LoRa frequency usage.
 
 *Важная информация о соответствии нормативным требованиям*
+
+
+# Микро SD 
+
+ESP32:
+- GPIO16 → SD Card CS
+- GPIO17 → SD Card MOSI  
+- GPIO18 → SD Card MISO
+- GPIO5 → SD Card SCK
+
+- GPIO26 → MAX98357A BCLK (I2S)
+- GPIO25 → MAX98357A LRC (I2S)
+- GPIO22 → MAX98357A DIN (I2S)
