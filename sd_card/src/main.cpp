@@ -40,7 +40,7 @@ void setup() {
   // Настройка аудиовыхода
   output = new AudioOutputI2S();
   output->SetPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-  output->SetGain(1); // Громкость 0.1
+  output->SetGain(0.3); // Громкость 0.1
 
   // Запуск воспроизведения с SD-карты
   startPlayback();
@@ -77,7 +77,7 @@ void startPlayback() {
   }
   
   // Проверяем наличие файла
-  if (!SD.exists("/0001.mp3")) {
+  if (!SD.exists("/0003.mp3")) {
     Serial.println("File 0001.mp3 not found on SD card!");
     listFiles();
     Serial.println("Waiting 5 seconds before retry...");
@@ -86,7 +86,7 @@ void startPlayback() {
   }
   
   // Создаем объекты для воспроизведения
-  sdFile = new AudioFileSourceSD("/0001.mp3");
+  sdFile = new AudioFileSourceSD("/0003.mp3");
   decoder = new AudioGeneratorMP3();
   
   // Начинаем воспроизведение
